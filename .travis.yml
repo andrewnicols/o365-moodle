@@ -1,0 +1,59 @@
+language: php
+
+sudo: false
+
+cache:
+  directories:
+    - $HOME/.composer/cache
+
+php:
+ - 7.0
+   #- 5.6
+   #- 5.5
+   #- 5.4
+
+env:
+ global:
+  - MOODLE_BRANCH=MOODLE_30_STABLE
+ matrix:
+  - DB=pgsql
+  - DB=mysqli
+
+before_install:
+  - if [ -n "$GITHUB_APITOKEN" ]; then composer config -g github-oauth.github.com $GITHUB_APITOKEN; fi
+  - phpenv config-rm xdebug.ini
+  - pwd
+  - cd ../..
+  - pwd
+  - composer selfupdate
+  - composer create-project -n --no-dev moodlerooms/moodle-plugin-ci ci ^1
+  - export PATH="$(cd ci/bin; pwd):$(cd ci/vendor/bin; pwd):$PATH"
+
+install:
+  # moodle-plugin-ci only supports one plugin at the moment.
+  - pwd
+  - ls
+  - moodle-plugin-ci install --plugin "$TRAVIS_BUILD_DIR"/auth/oidc
+  - cp -Rf "$TRAVIS_BUILD_DIR"/auth/* moodle/auth
+  - cp -Rf "$TRAVIS_BUILD_DIR"/blocks/* moodle/blocks
+  - cp -Rf "$TRAVIS_BUILD_DIR"/filter/* moodle/filter
+  - cp -Rf "$TRAVIS_BUILD_DIR"/local/* moodle/local
+  - cp -Rf "$TRAVIS_BUILD_DIR"/mod/assign/feedback/* moodle/mod/assign/feedback
+  - cp -Rf "$TRAVIS_BUILD_DIR"/mod/assign/submission/* moodle/mod/assign/submission
+  - cp -Rf "$TRAVIS_BUILD_DIR"/repository/* moodle/repository
+  - cp -Rf "$TRAVIS_BUILD_DIR"/user/profile/field/* moodle/user/profile/field
+  #- php moodle/admin/cli/upgrade.php --non-interactive --allow-unstable
+  - composer install -d ./moodle
+  - php moodle/admin/tool/phpunit/cli/init.php
+    #- php moodle/admin/tool/behat/cli/init.php
+
+script:
+  - >
+    for plugin in auth/oidc blocks/microsoft blocks/onenote filter/oembed local/microsoftservices local/msaccount local/o365 local/office365 local/onenote mod/assign/submission/onenote mod/assign/feedback/onenote repository/office365 repository/onenote user/profile/field/o365 user/profile/field/oidc; do
+      export PLUGIN_DIR=moodle/"$plugin" ;
+      #moodle-plugin-ci csslint ;
+      #moodle-plugin-ci shifter ;
+      #moodle-plugin-ci jshint ;
+      moodle-plugin-ci phpunit ;
+      moodle-plugin-ci behat ;
+    done
